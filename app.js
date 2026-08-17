@@ -3,8 +3,8 @@
    Todo corre local en el teléfono (GPU/WebGL).
    ============================================================ */
 
-import * as tf from '@tensorflow/tfjs';
-import * as cocoSsd from '@tensorflow-models/coco-ssd';
+/* Sin imports: tf y cocoSsd llegan como GLOBALES desde los <script> del CDN
+   en index.html. Con <script src="app.js"> (clásico) NO debe haber 'import'. */
 
 // ---------- CONSTANTES ----------
 const DB_NAME = 'fenofresa';
@@ -95,16 +95,30 @@ let detector = null;
 let modelReady = false;
 
 async function loadModel() {
+  if (modelReady) return;
   try {
-    $('model-status').textContent = '⏳ Descargando modelo COCO-SSD (15MB)…';
+    $('model-status').textContent = '⏳ Iniciando IA local…';
+    // Backend WebGL (GPU) + banderas de rendimiento para móvil
+    await tf.setBackend('webgl');
     await tf.ready();
+    tf.env().set('WEBGL_PACK', true);
+    tf.env().set('WEBGL_FORCE_F16_TEXTURES', true); // media precisión = más rápido
+    $('model-status').textContent = '⏳ Cargando modelo (solo la 1ª vez)…';
     detector = await cocoSsd.load({ base: 'lite_mobilenet_v2' });
+
+    // Calentar los shaders con una inferencia dummy: evita el "tirón"
+    // de varios segundos en la PRIMERA foto real.
+    $('model-status').textContent = '⏳ Optimizando para tu dispositivo…';
+    const warm = tf.zeros([320, 320, 3], 'int32');
+    await detector.detect(warm, 1, 0.9);
+    tf.dispose(warm);
+
     modelReady = true;
-    $('model-status').textContent = '✅ Modelo cargado. Listo para detectar.';
+    $('model-status').textContent = '✅ IA lista · procesa sin conexión';
     $('model-status').style.background = '#D4E8D0';
   } catch (e) {
     console.error(e);
-    $('model-status').textContent = '❌ Error cargando modelo. Revisa internet.';
+    $('model-status').textContent = '❌ No se pudo iniciar la IA. Revisa la conexión en el primer arranque.';
     $('model-status').style.background = '#FCE4E4';
   }
 }
@@ -115,78 +129,88 @@ let currentDetections = [];  // array de { clase, x, y, w, h, confianza }
 let showBoxes = true;
 
 async function analyzeImage(file) {
-  $('analyze-status').textContent = '⏳ Procesando imagen…';
+  const panel = $('processing-panel');
+  panel.classList.remove('hidden');
+  const t0 = performance.now();
+  const step = (txt, p) => {
+    $('proc-step').textContent = txt;
+    $('proc-bar').style.width = p + '%';
+    $('proc-time').textContent = Math.round(performance.now() - t0) + ' ms';
+  };
+
   if (!modelReady) {
-    $('analyze-status').textContent = '⏳ Esperando que cargue el modelo…';
+    step('Cargando IA…', 5);
     await loadModel();
-    if (!modelReady) return;
+    if (!modelReady) { $('analyze-status').textContent = '❌ IA no disponible.'; panel.classList.add('hidden'); return; }
   }
 
-  // 1. Cargar imagen a canvas
-  const cv = await loadToCanvas(file);
+  // 1. PREPROCESO — decodifica y baja resolución (lo que acelera todo)
+  step('Preprocesando imagen…', 20);
+  const maxDim = parseInt($('res-slider')?.value, 10) || 512;
+  const { cv, ow, oh } = await loadToCanvas(file, maxDim);
   currentCanvas = cv;
   const w = cv.width, h = cv.height;
+  $('info-original').textContent = `${ow}×${oh}`;
+  $('info-processed').textContent = `${w}×${h}`;
 
-  // 2. Inferencia
-  const imgTensor = tf.browser.fromPixels(cv);
-  const predictions = await detector.detect(imgTensor);
-  tf.dispose(imgTensor);
+  // 2. INFERENCIA — pasa el canvas directo (sin tensor intermedio) y filtra
+  //    por confianza mínima para reducir el post-proceso.
+  step('Detectando objetos…', 55);
+  const predictions = await detector.detect(cv, 20, 0.35);
 
-  // 3. Mapear a nuestros estadios y normalizar coordenadas
+  // 3. Mapear a estadios y normalizar coordenadas 0–1
+  step('Dibujando resultados…', 85);
   const detections = [];
   predictions.forEach(p => {
     const clase = CLASS_MAP[p.class] || null;
     if (!clase) return;
-    const [x, y, bw, bh] = p.bbox; // [x, y, width, height] en píxeles
-    detections.push({
-      clase,
-      x: x / w,
-      y: y / h,
-      w: bw / w,
-      h: bh / h,
-      confianza: Math.round(p.score * 100)
-    });
+    const [x, y, bw, bh] = p.bbox;
+    detections.push({ clase, x: x / w, y: y / h, w: bw / w, h: bh / h, confianza: Math.round(p.score * 100) });
   });
 
-  // 4. Contar por clase
   const counts = { verde: 0, blanco: 0, envero: 0, rojo: 0, flores: 0 };
   detections.forEach(d => { if (counts[d.clase] !== undefined) counts[d.clase]++; });
 
-  // 5. Cobertura (área de cajas)
   const cov = { verde: 0, blanco: 0, envero: 0, rojo: 0, flores: 0 };
-  detections.forEach(d => {
-    const area = d.w * d.h * 100;
-    cov[d.clase] = (cov[d.clase] || 0) + area;
-  });
-  const total = Object.values(cov).reduce((a,b) => a+b, 0) || 1;
-  Object.keys(cov).forEach(k => cov[k] = +((cov[k] / total) * 100).toFixed(1));
+  detections.forEach(d => { cov[d.clase] = (cov[d.clase] || 0) + d.w * d.h * 100; });
+  const totalCov = Object.values(cov).reduce((a, b) => a + b, 0) || 1;
+  Object.keys(cov).forEach(k => cov[k] = +((cov[k] / totalCov) * 100).toFixed(1));
 
-  // 6. Guardar global y dibujar
   currentDetections = detections;
   drawPreview();
   updateUI(counts, cov);
   $('results').classList.remove('hidden');
-  $('analyze-status').textContent = `✅ ${detections.length} objetos detectados. Revisa y guarda.`;
+
+  step('Listo', 100);
+  const ms = Math.round(performance.now() - t0);
+  $('info-total').textContent = `${ms} ms`;
+  $('analyze-status').textContent = detections.length
+    ? `✅ ${detections.length} objetos · ${ms} ms. Revisa y guarda.`
+    : `⚠️ Sin detecciones (COCO no conoce fresas). Ajusta a mano y guarda para entrenar. · ${ms} ms`;
+  setTimeout(() => panel.classList.add('hidden'), 1600);
 }
 
-// Cargar imagen a canvas (redimensiona para rendimiento)
-async function loadToCanvas(file) {
-  let bmp;
-  try { bmp = await createImageBitmap(file, { imageOrientation: 'from-image' }); }
-  catch { 
+// Cargar imagen a canvas redimensionado. Devuelve también el tamaño original.
+async function loadToCanvas(file, maxDim = 512) {
+  let bmp, ow, oh;
+  try {
+    bmp = await createImageBitmap(file, { imageOrientation: 'from-image' });
+    ow = bmp.width; oh = bmp.height;
+  } catch {
     bmp = await new Promise((res, rej) => {
       const img = new Image();
       img.onload = () => res(img); img.onerror = rej;
       img.src = URL.createObjectURL(file);
     });
+    ow = bmp.naturalWidth || bmp.width; oh = bmp.naturalHeight || bmp.height;
   }
-  const maxDim = 800;
-  const s = Math.min(1, maxDim / Math.max(bmp.width, bmp.height));
-  const w = Math.round(bmp.width * s), h = Math.round(bmp.height * s);
+  const s = Math.min(1, maxDim / Math.max(ow, oh));
+  const w = Math.round(ow * s), h = Math.round(oh * s);
   const cv = document.createElement('canvas');
   cv.width = w; cv.height = h;
-  cv.getContext('2d').drawImage(bmp, 0, 0, w, h);
-  return cv;
+  cv.getContext('2d', { willReadFrequently: true }).drawImage(bmp, 0, 0, w, h);
+  bmp.close?.();
+  return { cv, ow, oh };
 }
 
 // ---------- DIBUJAR PREVIEW CON CAJAS ----------
@@ -443,6 +467,8 @@ function bind() {
     deferredPrompt.prompt(); await deferredPrompt.userChoice;
     deferredPrompt = null; $('btn-install').classList.add('hidden');
   });
+  const slider = $('res-slider');
+  if (slider) slider.addEventListener('input', () => { $('res-value').textContent = slider.value; });
 }
 
 // ---------- INICIO ----------
@@ -450,8 +476,11 @@ async function init() {
   bind();
   netStatus();
   updateFrutos();
+  // Resolución por defecto más baja = respuesta más rápida (súbela si quieres más detalle)
+  const slider = $('res-slider');
+  if (slider) { slider.value = 512; $('res-value').textContent = '512'; }
   await refreshTable();
-  // Cargar modelo al inicio
+  // Precargar y CALENTAR el modelo al abrir la app (no en la 1ª foto)
   loadModel();
 }
 document.addEventListener('DOMContentLoaded', init);
