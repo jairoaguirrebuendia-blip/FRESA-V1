@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="es-MX">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>FenoFresa · IA local</title>
+<meta name="theme-color" content="#16281D" />
+<link rel="manifest" href="manifest.webmanifest" />
+<link rel="apple-touch-icon" href="icons/icon-192.png" />
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;700&display=swap');
+  * { box-sizing: border-box; margin: 0; }
+  body {
+    font-family: 'Inter', sans-serif;
+    background: #F3F5F0; color: #182219;
+    padding-bottom: 40px; -webkit-font-smoothing: antialiased;
+  }
+  :root {
+    --verde: #5C8C3F; --blanco: #D8D2B0; --envero: #E48AA3;
+    --rojo: #C4303C; --flor: #E9C46A; --card: #fff;
+  }
+  .hidden { display: none !important; }
+  .mono { font-family: 'JetBrains Mono', monospace; }
+
+  header {
+    background: #16281D; color: #EAF0E6;
+    padding: calc(env(safe-area-inset-top) + 16px) 18px 12px;
+  }
+  .hrow { display: flex; align-items: center; gap: 10px; }
+  .hrow h1 { font-size: 28px; font-weight: 700; letter-spacing: -0.02em; flex: 1; }
+  .net { width: 10px; height: 10px; border-radius: 50%; background: #C46; flex: none; }
+  .net.on { background: #7CC36B; }
+  .tagline { font-size: 13px; color: #AEC4B2; margin: 4px 0 12px; }
+  .spectrum { display: flex; height: 6px; margin: 0 -18px; }
+  .spectrum span { flex: 1; }
+  .i0 { background: var(--verde); } .i1 { background: var(--blanco); }
+  .i2 { background: var(--envero); } .i3 { background: var(--rojo); }
+  .btn-install { background: #EAF0E6; color: #16281D; border: none; border-radius: 8px;
+    padding: 6px 14px; font-weight: 700; font-size: 13px; }
+
+  main { max-width: 640px; margin: 0 auto; padding: 16px; }
+  .card { background: var(--card); border: 1px solid #E1E6DE; border-radius: 14px;
+    padding: 16px; margin-bottom: 14px; }
+  .card-head { font-weight: 700; font-size: 15px; display: flex; align-items: center;
+    gap: 8px; margin-bottom: 14px; }
+  .card-head .tag { background: #16281D; color: #CFE0C8; width: 24px; height: 24px;
+    display: grid; place-items: center; border-radius: 6px; font-size: 12px;
+    font-family: 'JetBrains Mono', monospace; }
+
+  .cap-btns { display: flex; gap: 10px; }
+  .cap-btns button { flex: 1; border: none; border-radius: 11px; padding: 16px 10px;
+    font-weight: 700; font-size: 15px; display: flex; flex-direction: column;
+    align-items: center; gap: 4px; }
+  .cap-primary { background: var(--rojo); color: #fff; }
+  .cap-secondary { background: #EEF2EB; color: #16281D; border: 1px solid #E1E6DE; }
+  .status { font-size: 13px; color: #6B7A70; margin-top: 10px; min-height: 20px; }
+  .model-status { font-size: 12px; background: #E8F0E6; padding: 6px 10px;
+    border-radius: 8px; margin-top: 6px; color: #2E5A3B; }
+
+  #preview { width: 100%; border-radius: 11px; border: 1px solid #E1E6DE;
+    display: block; background: #000; }
+  .prev-bar { display: flex; justify-content: space-between; align-items: center;
+    margin-top: 8px; flex-wrap: wrap; gap: 4px; }
+  .coverage { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 12px;
+    color: #6B7A70; }
+  .coverage b { color: #182219; font-family: 'JetBrains Mono', monospace; }
+
+  .frutos-line { display: flex; align-items: baseline; gap: 10px; margin-bottom: 6px; }
+  .frutos-line .n { font-size: 40px; font-weight: 700; line-height: 1; }
+  .meter { display: flex; height: 30px; border-radius: 8px; overflow: hidden;
+    border: 1px solid #E1E6DE; background: #F2F2EC; margin-bottom: 16px; }
+  .seg { display: grid; place-items: center; font-family: 'JetBrains Mono', monospace;
+    font-weight: 700; font-size: 11px; min-width: 0; }
+  .empty-seg { width: 100%; color: #6B7A70; font-weight: 400; font-size: 12px; }
+
+  .counts { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
+  .ct { border: 1px solid #E1E6DE; border-radius: 10px; padding: 9px 10px; }
+  .ct .lbl { font-size: 12px; font-weight: 600; display: flex; align-items: center;
+    gap: 6px; margin-bottom: 6px; }
+  .swatch { width: 12px; height: 12px; border-radius: 3px; flex: none; }
+  .stepper { display: flex; align-items: center; gap: 6px; }
+  .stepper button { width: 32px; height: 34px; border: 1px solid #E1E6DE;
+    background: #FAFBF8; border-radius: 8px; font-size: 18px; }
+  .stepper input { flex: 1; text-align: center; border: 1px solid #E1E6DE;
+    border-radius: 8px; height: 34px; font-family: 'JetBrains Mono', monospace;
+    font-weight: 700; font-size: 16px; min-width: 0; background: #FAFBF8; }
+
+  .field { margin-bottom: 10px; }
+  .field label { display: block; font-size: 11px; text-transform: uppercase;
+    letter-spacing: 0.05em; color: #6B7A70; margin-bottom: 4px; }
+  .field input, .field textarea { width: 100%; border: 1px solid #E1E6DE;
+    border-radius: 9px; padding: 10px 12px; font-size: 14px; background: #FAFBF8; }
+  .row2 { display: flex; gap: 10px; } .row2 .field { flex: 1; }
+  .btn-save { width: 100%; border: none; border-radius: 11px;
+    background: #2E5A3B; color: #fff; font-weight: 700; font-size: 15px;
+    padding: 14px; margin-top: 4px; }
+
+  .save-btns { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+  .save-btns button { border: none; border-radius: 9px; padding: 10px 14px;
+    font-weight: 600; font-size: 13px; background: #2E5A3B; color: #fff; }
+  .save-btns .ghost { background: transparent; color: #2E5A3B;
+    border: 1px solid #E1E6DE; }
+  .save-btns .danger { color: #C4303C; }
+  .table-wrap { overflow-x: auto; border: 1px solid #E1E6DE; border-radius: 10px; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; min-width: 520px; }
+  th { background: #F5F7F2; text-align: left; padding: 8px 9px;
+    font-size: 10px; text-transform: uppercase; color: #6B7A70; }
+  td { padding: 8px 9px; border-bottom: 1px solid #EEF1EA; }
+  .del { border: none; background: transparent; color: #B9C2B4; font-size: 16px; }
+
+  footer { max-width: 640px; margin: 8px auto; padding: 0 18px;
+    font-size: 11px; color: #6B7A70; line-height: 1.6; }
+</style>
+</head>
+<body>
+<header>
+  <div class="hrow">
+    <div class="net" id="net-dot"></div>
+    <h1>FenoFresa</h1>
+    <button id="btn-install" class="btn-install hidden">Instalar</button>
+  </div>
+  <p class="tagline">Detección local con IA · Bounding boxes · Entrena tu YOLO</p>
+  <div class="spectrum"><span class="i0"></span><span class="i1"></span><span class="i2"></span><span class="i3"></span></div>
+</header>
+
+<main>
+  <!-- Captura -->
+  <section class="card">
+    <div class="card-head"><span class="tag">01</span> Capturar</div>
+    <div class="cap-btns">
+      <button id="btn-camera" class="cap-primary"><span>📷</span>Tomar foto</button>
+      <button id="btn-analyze" class="cap-secondary"><span>🖼️</span>Elegir imagen</button>
+    </div>
+    <input id="camera-input" type="file" accept="image/*" capture="environment" hidden />
+    <input id="file-input" type="file" accept="image/*" hidden />
+    <div class="status" id="analyze-status">Carga una foto de la planta o racimo.</div>
+    <div class="model-status" id="model-status">⏳ Cargando modelo de IA local…</div>
+
+    <div id="preview-wrap" class="hidden">
+      <canvas id="preview"></canvas>
+      <div class="prev-bar">
+        <div class="coverage" id="coverage"></div>
+        <button id="btn-overlay" class="btn-overlay" style="background:transparent;border:1px solid #E1E6DE;border-radius:8px;padding:4px 10px;font-size:12px;">Ocultar cajas</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- Conteo -->
+  <section class="card hidden" id="results">
+    <div class="card-head"><span class="tag">02</span> Conteo · ajusta</div>
+    <div class="frutos-line"><span class="n" id="frutos-total">0</span><span class="l">frutos totales</span></div>
+    <div class="meter" id="stage-meter"></div>
+
+    <div class="counts">
+      <div class="ct"><div class="lbl"><span class="swatch" style="background:var(--verde)"></span>Verde</div>
+        <div class="stepper"><button id="s-verde-dn">−</button><input id="c-verde" type="number" value="0"/><button id="s-verde-up">+</button></div></div>
+      <div class="ct"><div class="lbl"><span class="swatch" style="background:var(--blanco)"></span>Blanco</div>
+        <div class="stepper"><button id="s-blanco-dn">−</button><input id="c-blanco" type="number" value="0"/><button id="s-blanco-up">+</button></div></div>
+      <div class="ct"><div class="lbl"><span class="swatch" style="background:var(--envero)"></span>Envero</div>
+        <div class="stepper"><button id="s-envero-dn">−</button><input id="c-envero" type="number" value="0"/><button id="s-envero-up">+</button></div></div>
+      <div class="ct"><div class="lbl"><span class="swatch" style="background:var(--rojo)"></span>Rojo</div>
+        <div class="stepper"><button id="s-rojo-dn">−</button><input id="c-rojo" type="number" value="0"/><button id="s-rojo-up">+</button></div></div>
+      <div class="ct"><div class="lbl"><span class="swatch" style="background:var(--flor)"></span>Flores</div>
+        <div class="stepper"><button id="s-flores-dn">−</button><input id="c-flores" type="number" value="0"/><button id="s-flores-up">+</button></div></div>
+      <div class="ct"><div class="lbl"><span class="swatch" style="background:#9CAF88"></span>Botones (manual)</div>
+        <div class="stepper"><button id="s-botones-dn">−</button><input id="c-botones" type="number" value="0"/><button id="s-botones-up">+</button></div></div>
+    </div>
+
+    <div style="height:14px"></div>
+    <div class="row2">
+      <div class="field"><label>Parcela</label><input id="f-parcela" placeholder="Ej. Lote 3" /></div>
+      <div class="field"><label>Variedad</label><input id="f-variedad" placeholder="Ej. Albion" /></div>
+    </div>
+    <div class="field"><label>Notas</label><textarea id="f-notas" placeholder="Observaciones…"></textarea></div>
+    <button id="btn-save" class="btn-save">Guardar con anotaciones (BBox)</button>
+  </section>
+
+  <!-- Base de datos -->
+  <section class="card">
+    <div class="card-head"><span class="tag">03</span> Base local <span style="margin-left:auto;font-size:12px;color:#6B7A70;"><b id="rec-count">0</b> registros</span></div>
+    <div class="save-btns">
+      <button id="btn-csv">CSV</button>
+      <button id="btn-json">JSON</button>
+      <button id="btn-yolo" style="background:#C4303C;">Exportar YOLO</button>
+      <button id="btn-import" class="ghost">Importar JSON</button>
+      <button id="btn-clear" class="ghost danger">Vaciar</button>
+      <input id="import-input" type="file" accept=".json" hidden />
+    </div>
+    <div class="table-wrap hidden" id="table-wrap">
+      <table><thead><tr><th>Fecha</th><th>Parcela</th><th>Frutos</th><th>V</th><th>B</th><th>E</th><th>R</th><th>Flor</th><th>Bot</th><th>BBox</th><th></th></tr></thead>
+      <tbody id="tbody"></tbody></table>
+    </div>
+    <div class="hidden" id="empty-rec" style="color:#6B7A70;padding:10px 0;">Sin registros aún.</div>
+  </section>
+</main>
+<footer>
+  El modelo COCO-SSD detecta objetos genéricos. Mapeamos: 🍎→Rojo, 🍊→Envero, 🌸→Flor, 🍌→Blanco, 🥦→Verde.
+  Guarda las cajas para reentrenar tu YOLO específico para fresas.
+</footer>
+
+<script type="importmap">
+{
+  "imports": {
+    "@tensorflow/tfjs": "https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js",
+    "@tensorflow-models/coco-ssd": "https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.3/dist/coco-ssd.min.js"
+  }
+}
+</script>
+<script type="module" src="app.js"></script>
+</body>
+</html>
